@@ -17,10 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-
 import com.chad.library.adapter.base.BaseQuickAdapter;
-import com.chad.library.adapter.base.listener.OnItemChildClickListener;
-import com.chad.library.adapter.base.listener.OnItemClickListener;
 import com.google.android.material.snackbar.Snackbar;
 import com.zlylib.fileselectorlib.R;
 import com.zlylib.fileselectorlib.SelectOptions;
@@ -39,12 +36,13 @@ import com.zlylib.fileselectorlib.utils.LogUtils;
 import com.zlylib.titlebarlib.ActionBarCommon;
 import com.zlylib.titlebarlib.OnActionBarChildClickListener;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileSelectorActivity extends AppCompatActivity implements OnItemClickListener, OnItemChildClickListener,
-        View.OnClickListener, FileListAdapter.onLoadFileCountListener, EssFileListCallBack, EssFileCountCallBack {
+public class FileSelectorActivity extends AppCompatActivity implements BaseQuickAdapter.OnItemClickListener, View.OnClickListener, FileListAdapter.onLoadFileCountListener, EssFileListCallBack, EssFileCountCallBack {
 
     /*当前目录，默认是SD卡根目录*/
     private String mCurFolder = Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator;
@@ -78,11 +76,10 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
         mSdCardList = FileUtils.getAllSdPaths(this);
         if (!mSdCardList.isEmpty()) {
             mCurFolder = mSdCardList.get(0) + File.separator;
-            if(FileUtils.exist(SelectOptions.getInstance().getTargetPath())){
+            if (FileUtils.exist(SelectOptions.getInstance().getTargetPath())) {
                 mCurFolder = SelectOptions.getInstance().getTargetPath();
             }
         }
-
 
         initUi();
         initData();
@@ -148,16 +145,37 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
         mBreadAdapter = new BreadAdapter(breadModelList);
         mBreadRecyclerView.setAdapter(mBreadAdapter);
         mBreadAdapter.onAttachedToRecyclerView(mBreadRecyclerView);
-        mBreadAdapter.setOnItemChildClickListener(this);
+        mBreadAdapter.addOnItemChildClickListener(R.id.btn_bread, new BaseQuickAdapter.OnItemChildClickListener<BreadModel>() {
+            @Override
+            public void onItemClick(@NotNull BaseQuickAdapter<BreadModel, ?> baseQuickAdapter, @NotNull View view, int position) {
+                //点击某个路径时
+                String queryPath = FileUtils.getBreadModelListByPosition(mSdCardList, mBreadAdapter.getItems(), position);
+                if (mCurFolder.equals(queryPath)) {
+                    return;
+                }
+                executeListTask(mSelectedFileList,
+                                queryPath,
+                                SelectOptions.getInstance().getFileTypes(),
+                                SelectOptions.getInstance().getSortType());
+            }
+        });
 
     }
 
     private void initData() {
-        executeListTask(mSelectedFileList, mCurFolder, SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().getSortType());
+        executeListTask(mSelectedFileList,
+                        mCurFolder,
+                        SelectOptions.getInstance().getFileTypes(),
+                        SelectOptions.getInstance().getSortType());
     }
 
     private void executeListTask(List<EssFile> essFileList, String queryPath, String[] types, int sortType) {
-        essFileListTask = new EssFileListTask(essFileList, queryPath, types, sortType, SelectOptions.getInstance().isOnlyShowFolder(), this);
+        essFileListTask = new EssFileListTask(essFileList,
+                                              queryPath,
+                                              types,
+                                              sortType,
+                                              SelectOptions.getInstance().isOnlyShowFolder(),
+                                              this);
         essFileListTask.execute();
     }
 
@@ -186,40 +204,42 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
         final SelectSdcardAdapter adapter = new SelectSdcardAdapter(FileUtils.getAllSdCardList(mSdCardList));
         recyclerView.setAdapter(adapter);
         adapter.onAttachedToRecyclerView(recyclerView);
-        adapter.setOnItemClickListener(new OnItemClickListener() {
+        adapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
             @Override
-            public void onItemClick(BaseQuickAdapter adapterIn, View view, int position) {
+            public void onClick(@NotNull BaseQuickAdapter baseQuickAdapter, @NotNull View view, int position) {
                 mSelectSdCardWindow.dismiss();
                 mHasChangeSdCard = true;
-                executeListTask(mSelectedFileList, FileUtils.getChangeSdCard(adapter.getData().get(position), mSdCardList), SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().getSortType());
+                executeListTask(mSelectedFileList,
+                                FileUtils.getChangeSdCard(adapter.getItems().get(position), mSdCardList),
+                                SelectOptions.getInstance().getFileTypes(),
+                                SelectOptions.getInstance().getSortType());
             }
+
         });
         mSelectSdCardWindow.showAsDropDown(mImbSelectSdCard);
     }
 
-    @Override
-    public void onItemChildClick(BaseQuickAdapter adapter, View view, int position) {
-        if (adapter.equals(mBreadAdapter) && view.getId() == R.id.btn_bread) {
-            //点击某个路径时
-            String queryPath = FileUtils.getBreadModelListByPosition(mSdCardList, mBreadAdapter.getData(), position);
-            if (mCurFolder.equals(queryPath)) {
-                return;
-            }
-            executeListTask(mSelectedFileList, queryPath, SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().getSortType());
-        }
-    }
+
+
+
 
     @Override
-    public void onItemClick(BaseQuickAdapter adapter, View view, final int position) {
+    public void onClick(@NotNull BaseQuickAdapter adapter, @NotNull View view, int position) {
         if (adapter.equals(mAdapter)) {
-            EssFile item = mAdapter.getData().get(position);
+            EssFile item = mAdapter.getItems().get(position);
 
             if (item.isDirectory()) {
                 //点击文件夹
                 //保存当前的垂直滚动位置
-                mBreadAdapter.getData().get(mBreadAdapter.getData().size() - 1).setPrePosition(mRecyclerView.computeVerticalScrollOffset());
-                executeListTask(mSelectedFileList, mCurFolder + item.getName() + File.separator, SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().getSortType());
-            } else {
+                mBreadAdapter.getItems()
+                             .get(mBreadAdapter.getItems().size() - 1)
+                             .setPrePosition(mRecyclerView.computeVerticalScrollOffset());
+                executeListTask(mSelectedFileList,
+                                mCurFolder + item.getName() + File.separator,
+                                SelectOptions.getInstance().getFileTypes(),
+                                SelectOptions.getInstance().getSortType());
+            }
+            else {
                 //选中某文件后，判断是否只能选择文件夹
                 if (SelectOptions.getInstance().isOnlySelectFolder()) {
                     if (!item.getFile().isDirectory()) {
@@ -246,25 +266,31 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
                     super.onBackPressed();
                     return;
                 }
-                if (mAdapter.getData().get(position).isChecked()) {
+                if (mAdapter.getItems().get(position).isChecked()) {
                     int index = findFileIndex(item);
                     if (index != -1) {
                         mSelectedFileList.remove(index);
                         mSelectedList.remove(index);
                     }
-                } else {
+                }
+                else {
                     if (mSelectedFileList.size() >= SelectOptions.getInstance().maxCount) {
                         //超出最大可选择数量后
-                        Snackbar.make(mRecyclerView, "您最多只能选择" + SelectOptions.getInstance().maxCount + "个。", Snackbar.LENGTH_SHORT).show();
+                        Snackbar.make(mRecyclerView,
+                                      "您最多只能选择" + SelectOptions.getInstance().maxCount + "个。",
+                                      Snackbar.LENGTH_SHORT).show();
                         return;
                     }
                     mSelectedFileList.add(item);
                     mSelectedList.add(item.getAbsolutePath());
                 }
-                mAdapter.getData().get(position).setChecked(!mAdapter.getData().get(position).isChecked());
+                mAdapter.getItems().get(position).setChecked(!mAdapter.getItems().get(position).isChecked());
                 // mAdapter.notifyItemChanged(position, "");
                 mAdapter.notifyDataSetChanged();
-                abc.getRightTextView().setText(String.format(getString(R.string.selected_file_count), String.valueOf(mSelectedFileList.size()), String.valueOf(SelectOptions.getInstance().maxCount)));
+                abc.getRightTextView()
+                   .setText(String.format(getString(R.string.selected_file_count),
+                                          String.valueOf(mSelectedFileList.size()),
+                                          String.valueOf(SelectOptions.getInstance().maxCount)));
             }
         }
     }
@@ -283,7 +309,11 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
 
     @Override
     public void onLoadFileCount(int posistion) {
-        essFileCountTask = new EssFileCountTask(posistion, mAdapter.getData().get(posistion).getAbsolutePath(), SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().isOnlyShowFolder(), this);
+        essFileCountTask = new EssFileCountTask(posistion,
+                                                mAdapter.getItems().get(posistion).getAbsolutePath(),
+                                                SelectOptions.getInstance().getFileTypes(),
+                                                SelectOptions.getInstance().isOnlyShowFolder(),
+                                                this);
         essFileCountTask.execute();
     }
 
@@ -296,24 +326,27 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
     @Override
     public void onFindFileList(String queryPath, List<EssFile> fileList) {
         if (fileList.isEmpty()) {
-            mAdapter.setEmptyView(R.layout.empty_file_list);
+            mAdapter.setEmptyViewLayout(this,R.layout.empty_file_list );
+            mAdapter.setEmptyViewEnable(true);
         }
         mCurFolder = queryPath;
-        mAdapter.setNewInstance(fileList);
+        mAdapter.submitList(fileList);
         List<BreadModel> breadModelList = FileUtils.getBreadModeListFromPath(mSdCardList, mCurFolder);
         if (mHasChangeSdCard) {
-            mBreadAdapter.setNewInstance(breadModelList);
+            mBreadAdapter.submitList(breadModelList);
             mHasChangeSdCard = false;
-        } else {
-            if (breadModelList.size() > mBreadAdapter.getData().size()) {
+        }
+        else {
+            if (breadModelList.size() > mBreadAdapter.getItems().size()) {
                 //新增
-                List<BreadModel> newList = BreadModel.getNewBreadModel(mBreadAdapter.getData(), breadModelList);
-                mBreadAdapter.addData(newList);
-            } else {
+                List<BreadModel> newList = BreadModel.getNewBreadModel(mBreadAdapter.getItems(), breadModelList);
+                mBreadAdapter.addAll(newList);
+            }
+            else {
                 //减少
-                int removePosition = BreadModel.getRemovedBreadModel(mBreadAdapter.getData(), breadModelList);
+                int removePosition = BreadModel.getRemovedBreadModel(mBreadAdapter.getItems(), breadModelList);
                 if (removePosition > 0) {
-                    mBreadAdapter.setNewData(mBreadAdapter.getData().subList(0, removePosition));
+                    mBreadAdapter.submitList(mBreadAdapter.getItems().subList(0, removePosition));
                 }
             }
         }
@@ -321,14 +354,14 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
         mBreadRecyclerView.smoothScrollToPosition(mBreadAdapter.getItemCount() - 1);
         //先让其滚动到顶部，然后再scrollBy，滚动到之前保存的位置
         mRecyclerView.scrollToPosition(0);
-        int scrollYPosition = mBreadAdapter.getData().get(mBreadAdapter.getData().size() - 1).getPrePosition();
+        int scrollYPosition = mBreadAdapter.getItems().get(mBreadAdapter.getItems().size() - 1).getPrePosition();
         //恢复之前的滚动位置
         mRecyclerView.scrollBy(0, scrollYPosition);
     }
 
     @Override
     public void onFindChildFileAndFolderCount(int position, String childFileCount, String childFolderCount) {
-        mAdapter.getData().get(position).setChildCounts(childFileCount, childFolderCount);
+        mAdapter.getItems().get(position).setChildCounts(childFileCount, childFolderCount);
         // mAdapter.notifyItemChanged(position, "childCountChanges");
         mAdapter.notifyDataSetChanged();
     }
@@ -339,7 +372,10 @@ public class FileSelectorActivity extends AppCompatActivity implements OnItemCli
             super.onBackPressed();
             return;
         }
-        executeListTask(mSelectedFileList, new File(mCurFolder).getParentFile().getAbsolutePath() + File.separator, SelectOptions.getInstance().getFileTypes(), SelectOptions.getInstance().getSortType());
+        executeListTask(mSelectedFileList,
+                        new File(mCurFolder).getParentFile().getAbsolutePath() + File.separator,
+                        SelectOptions.getInstance().getFileTypes(),
+                        SelectOptions.getInstance().getSortType());
     }
 
     @Override
